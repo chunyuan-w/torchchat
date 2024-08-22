@@ -667,6 +667,11 @@ class Generator:
 
             kwargs = {"mode": "max-autotune"} if generator_args.max_autotune else {}
             
+            if self.profile:
+                from torch._inductor import config as inductor_config
+                torch._inductor.config.profiler_mark_wrapper_call = True
+                torch._inductor.config.cpp.enable_kernel_profile = True                
+
             if self.is_speculative:
                 self.model_forward = torch.compile(
                     self.model_forward, fullgraph=True, **kwargs
