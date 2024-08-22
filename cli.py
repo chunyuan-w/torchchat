@@ -142,6 +142,11 @@ def _add_model_config_args(parser, verb: str) -> None:
             action="store_true",
             help="Whether to compile the prefill. Improves prefill perf, but has higher compile times.",
         )
+        model_config_parser.add_argument(
+            "--max-autotune",
+            action="store_true",
+            help="Whether to use max-autotune.",
+        )        
 
     model_config_parser.add_argument(
         "--dtype",

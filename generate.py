@@ -115,6 +115,7 @@ class GeneratorArgs:
     compile_prefill: bool = False
     speculate_k: int = 5
     sequential_prefill: bool = False
+    max_autotune: bool = False
 
     def __post_init__(self):
         if self.compile_prefill and self.sequential_prefill:
@@ -159,6 +160,7 @@ class GeneratorArgs:
             compile_prefill=args.compile_prefill,
             speculate_k=args.speculate_k,
             sequential_prefill=sequential_prefill,
+            max_autotune=args.max_autotune,
         )
 
 
@@ -497,6 +499,7 @@ class Generator:
         seed: Optional[int] = None,
         **sampling_kwargs,
     ) -> torch.Tensor:
+        # breakpoint()
         """
         Takes a conditioning sequence (prompt) as input and continues to generate as many tokens as requested.
         """
@@ -661,17 +664,19 @@ class Generator:
                     False  # Bug with cudagraph trees in this case
                 )
 
+            kwargs = {"mode": "max-autotune"} if generator_args.max_autotune else {}
+            
             if self.is_speculative:
                 self.model_forward = torch.compile(
-                    self.model_forward, mode="reduce-overhead", fullgraph=True
+                    self.model_forward, fullgraph=True, **kwargs
                 )
 
             self.decode_one_token = torch.compile(
-                self.decode_one_token, mode="reduce-overhead", fullgraph=True
+                self.decode_one_token, fullgraph=True, **kwargs
             )
 
             if generator_args.compile_prefill:
-                self.prefill = torch.compile(self.prefill, fullgraph=True, dynamic=True)
+                self.prefill = torch.compile(self.prefill, fullgraph=True, dynamic=True, **kwargs)
 
         self.system_prompt = None
         # Set up our max_seq_length
@@ -820,10 +825,11 @@ class Generator:
             )
             compilation_time = time.perf_counter() - t0
             if hasattr(prof, "export_chrome_trace"):
-                if self.builder_args.use_distributed:
-                    prof.export_chrome_trace(f"{self.profile}_rank_{self.rank}.json")
-                else:
-                    prof.export_chrome_trace(f"{self.profile}.json")
+                print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+                # if self.builder_args.use_distributed:
+                #     prof.export_chrome_trace(f"{self.profile}_rank_{self.rank}.json")
+                # else:
+                #     prof.export_chrome_trace(f"{self.profile}.json")
             device_sync(device=self.builder_args.device)
             t = time.perf_counter() - t0
 
@@ -843,6 +849,8 @@ class Generator:
                 # Don't continue here.... because we need to report and reset
                 # continue
 
+            
+            # TODO: fix t for next token only
             logging.info(
                 f"\nTime for inference {i + 1}: {t:.02f} sec total, time to first token {aggregate_metrics.get('time_to_first_token', -1.0):.02f} sec with {'sequential' if generator_args.sequential_prefill else 'parallel'} prefill, {num_tokens_generated} tokens, {tokens_sec:.02f} tokens/sec, {1000 / tokens_sec:.02f} ms/token"
             )
@@ -898,6 +906,9 @@ def main(args):
 
 
 if __name__ == "__main__":
+    from torch._inductor import config
+    config.trace.log_autotuning_results = True    
+    
     parser = argparse.ArgumentParser(description="torchchat generate CLI")
     verb = "generate"
     add_arguments_for_verb(parser, verb)
