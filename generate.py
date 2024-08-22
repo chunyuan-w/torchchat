@@ -618,6 +618,7 @@ class Generator:
         tokens = self.tokenizer.encode(string)
         if bos:
             tokens = [self.tokenizer.bos_id()] + tokens
+        print("size after encode_tokens:", len(tokens))
         return torch.tensor(tokens, dtype=torch.int, device=device)
 
     def _callback(self, x, *, buffer, done_generating):
@@ -840,6 +841,9 @@ class Generator:
                 print("---------------------------------------------------")
 
             tokens_sec = num_tokens_generated / t
+            tokens_sec_fix = num_tokens_generated + 1 / t
+            next_tokens_sec = num_tokens_generated / (t - aggregate_metrics.get('time_to_first_token', -1.0))
+
             aggregate_metrics["tokens_per_sec"].append(tokens_sec)
 
             if jit_compile:
@@ -852,7 +856,15 @@ class Generator:
             
             # TODO: fix t for next token only
             logging.info(
-                f"\nTime for inference {i + 1}: {t:.02f} sec total, time to first token {aggregate_metrics.get('time_to_first_token', -1.0):.02f} sec with {'sequential' if generator_args.sequential_prefill else 'parallel'} prefill, {num_tokens_generated} tokens, {tokens_sec:.02f} tokens/sec, {1000 / tokens_sec:.02f} ms/token"
+                f"\nTime for inference {i + 1}: {t:.02f} sec total,\n\
+                 time to first token {aggregate_metrics.get('time_to_first_token', -1.0):.02f} sec\n\
+                 with {'sequential' if generator_args.sequential_prefill else 'parallel'} prefill,\n\
+                 {num_tokens_generated} tokens, {tokens_sec:.02f} tokens/sec, {1000 / tokens_sec:.02f} ms/token\n\
+                 total_latency_seconds: {t:.02f}\n\
+                 latency_per_token_seconds: {1 / tokens_sec_fix:.04f}\n\
+                 first_token_latency_seconds: {aggregate_metrics.get('time_to_first_token', -1.0):.02f} sec\n\
+                 next_token_latency_seconds: {1 / next_tokens_sec:.04f}\n\
+                "
             )
             logging.info(
                 f"Bandwidth achieved: {model_size * tokens_sec / 1e9:.02f} GB/s"
