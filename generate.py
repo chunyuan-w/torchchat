@@ -846,7 +846,7 @@ class Generator:
                 print("---------------------------------------------------")
 
             tokens_sec = num_tokens_generated / t
-            tokens_sec_fix = num_tokens_generated + 1 / t
+            tokens_sec_fix = (num_tokens_generated + 1) / t
             next_tokens_sec = num_tokens_generated / (t - aggregate_metrics.get('time_to_first_token', -1.0))
 
             aggregate_metrics["tokens_per_sec"].append(tokens_sec)
